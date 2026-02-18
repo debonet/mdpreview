@@ -3,13 +3,14 @@
 ## TL;DR
 
 * Single-file bash script that converts Markdown to styled HTML and opens it in your browser
+* Renders Mermaid diagrams out of the box (no config, no plugins)
 * Ships with 4 built-in styles: gdocs, github, dark, academic
 * Supports custom CSS styles via `~/.mdpreview/` with `@import` for composability
 * Watch mode auto-regenerates and reloads the browser tab on file save
 
 ## Purpose
 
-Pandoc converts Markdown to HTML but the default output looks like unstyled 1996 HTML. You end up copy-pasting CSS boilerplate or fighting with templates every time. mdpreview wraps pandoc with opinionated, good-looking styles and handles the open-in-browser workflow so you can focus on writing.
+Pandoc converts Markdown to HTML but the default output looks like unstyled 1996 HTML. You end up copy-pasting CSS boilerplate or fighting with templates every time. And if your Markdown has Mermaid diagrams, pandoc just renders them as code blocks. mdpreview wraps pandoc with opinionated, good-looking styles, automatic Mermaid rendering, and the open-in-browser workflow so you can focus on writing.
 
 ## Installation
 
