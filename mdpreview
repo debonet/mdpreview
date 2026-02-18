@@ -1,0 +1,432 @@
+#!/usr/bin/env bash
+
+S_DIR_USER="$HOME/.mdpreview"
+
+usage() {
+    echo "Usage: mdpreview [-w|--watch] [--style <name|path>] [--list-styles] <file.md>"
+    echo "  -w, --watch         Watch file for changes and auto-refresh"
+    echo "  --style <name|path> Use named style or CSS file path"
+    echo "  --list-styles       List all available styles and exit"
+    exit 1
+}
+
+fs_css_builtin_gdocs() {
+    cat <<'ENDCSS'
+body { font-family: Arial, sans-serif; font-size: 11pt; line-height: 1.5; color: #000; max-width: 816px; margin: 0 auto; padding: 72px; background: #fff; }
+h1 { font-size: 20pt; font-weight: normal; margin: 24pt 0 12pt 0; }
+h2 { font-size: 16pt; font-weight: normal; margin: 18pt 0 6pt 0; }
+h3 { font-size: 14pt; font-weight: bold; margin: 16pt 0 4pt 0; }
+h4 { font-size: 12pt; font-weight: bold; margin: 14pt 0 4pt 0; }
+p { margin: 0 0 11pt 0; }
+ul, ol { margin: 0 0 11pt 0; padding-left: 36pt; }
+code { font-family: "Courier New", monospace; font-size: 10pt; background: #f3f3f3; padding: 1pt 4pt; }
+pre { background: #f8f8f8; border: 1px solid #ddd; padding: 12pt; margin: 0 0 11pt 0; overflow-x: auto; }
+pre code { background: none; padding: 0; }
+blockquote { border-left: 3pt solid #ddd; margin: 0 0 11pt 0; padding-left: 12pt; color: #666; }
+table { border-collapse: collapse; margin: 0 0 11pt 0; }
+td, th { border: 1px solid #ddd; padding: 8pt; text-align: left; }
+th { background: #f3f3f3; font-weight: bold; }
+a { color: #1155cc; text-decoration: none; }
+a:hover { text-decoration: underline; }
+ENDCSS
+}
+
+fs_css_builtin_github() {
+    cat <<'ENDCSS'
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif; font-size: 16px; line-height: 1.5; color: #1f2328; max-width: 980px; margin: 0 auto; padding: 45px; background: #fff; word-wrap: break-word; }
+h1, h2, h3, h4, h5, h6 { margin-top: 24px; margin-bottom: 16px; font-weight: 600; line-height: 1.25; }
+h1 { font-size: 2em; padding-bottom: 0.3em; border-bottom: 1px solid #d1d9e0; }
+h2 { font-size: 1.5em; padding-bottom: 0.3em; border-bottom: 1px solid #d1d9e0; }
+h3 { font-size: 1.25em; }
+h4 { font-size: 1em; }
+p { margin: 0 0 16px 0; }
+ul, ol { margin: 0 0 16px 0; padding-left: 2em; }
+li + li { margin-top: 0.25em; }
+code { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; font-size: 85%; background: rgba(175,184,193,0.2); padding: 0.2em 0.4em; border-radius: 6px; }
+pre { background: #f6f8fa; border: 1px solid #d1d9e0; padding: 16px; margin: 0 0 16px 0; overflow-x: auto; border-radius: 6px; line-height: 1.45; }
+pre code { background: none; padding: 0; font-size: 85%; border-radius: 0; }
+blockquote { border-left: 0.25em solid #d1d9e0; margin: 0 0 16px 0; padding: 0 1em; color: #656d76; }
+table { border-collapse: collapse; margin: 0 0 16px 0; width: max-content; max-width: 100%; overflow: auto; }
+td, th { border: 1px solid #d1d9e0; padding: 6px 13px; }
+th { font-weight: 600; background: #f6f8fa; }
+tr:nth-child(2n) { background: #f6f8fa; }
+a { color: #0969da; text-decoration: none; }
+a:hover { text-decoration: underline; }
+hr { height: 0.25em; padding: 0; margin: 24px 0; background-color: #d1d9e0; border: 0; }
+img { max-width: 100%; }
+ENDCSS
+}
+
+fs_css_builtin_dark() {
+    cat <<'ENDCSS'
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif; font-size: 16px; line-height: 1.5; color: #e6edf3; max-width: 980px; margin: 0 auto; padding: 45px; background: #0d1117; word-wrap: break-word; }
+h1, h2, h3, h4, h5, h6 { margin-top: 24px; margin-bottom: 16px; font-weight: 600; line-height: 1.25; color: #f0f6fc; }
+h1 { font-size: 2em; padding-bottom: 0.3em; border-bottom: 1px solid #21262d; }
+h2 { font-size: 1.5em; padding-bottom: 0.3em; border-bottom: 1px solid #21262d; }
+h3 { font-size: 1.25em; }
+h4 { font-size: 1em; }
+p { margin: 0 0 16px 0; }
+ul, ol { margin: 0 0 16px 0; padding-left: 2em; }
+li + li { margin-top: 0.25em; }
+code { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; font-size: 85%; background: rgba(110,118,129,0.4); padding: 0.2em 0.4em; border-radius: 6px; }
+pre { background: #161b22; border: 1px solid #30363d; padding: 16px; margin: 0 0 16px 0; overflow-x: auto; border-radius: 6px; line-height: 1.45; }
+pre code { background: none; padding: 0; font-size: 85%; border-radius: 0; }
+blockquote { border-left: 0.25em solid #30363d; margin: 0 0 16px 0; padding: 0 1em; color: #8b949e; }
+table { border-collapse: collapse; margin: 0 0 16px 0; width: max-content; max-width: 100%; overflow: auto; }
+td, th { border: 1px solid #30363d; padding: 6px 13px; }
+th { font-weight: 600; background: #161b22; }
+tr:nth-child(2n) { background: #161b22; }
+a { color: #58a6ff; text-decoration: none; }
+a:hover { text-decoration: underline; }
+hr { height: 0.25em; padding: 0; margin: 24px 0; background-color: #30363d; border: 0; }
+img { max-width: 100%; }
+ENDCSS
+}
+
+fs_css_builtin_academic() {
+    cat <<'ENDCSS'
+body { font-family: Georgia, "Times New Roman", Times, serif; font-size: 12pt; line-height: 1.6; color: #111; max-width: 680px; margin: 0 auto; padding: 60px 80px; background: #fffff8; }
+h1 { font-size: 1.8em; font-weight: bold; margin: 2em 0 0.5em 0; text-align: center; }
+h2 { font-size: 1.4em; font-weight: bold; margin: 1.8em 0 0.4em 0; }
+h3 { font-size: 1.15em; font-weight: bold; font-style: italic; margin: 1.5em 0 0.3em 0; }
+h4 { font-size: 1em; font-weight: bold; margin: 1.2em 0 0.3em 0; }
+p { margin: 0 0 0.8em 0; text-align: justify; text-indent: 1.5em; }
+p:first-of-type, h1 + p, h2 + p, h3 + p, h4 + p, blockquote + p, pre + p, ul + p, ol + p, table + p { text-indent: 0; }
+ul, ol { margin: 0 0 0.8em 0; padding-left: 2.5em; }
+li { margin-bottom: 0.2em; }
+code { font-family: "Courier New", Courier, monospace; font-size: 0.9em; background: #f0f0e8; padding: 1px 4px; }
+pre { background: #f5f5ef; border-left: 3px solid #999; padding: 12px 16px; margin: 1em 0; overflow-x: auto; }
+pre code { background: none; padding: 0; }
+blockquote { border-left: 3px solid #999; margin: 1em 0; padding-left: 1em; color: #444; font-style: italic; }
+table { border-collapse: collapse; margin: 1em auto; }
+td, th { border-top: 1px solid #111; border-bottom: 1px solid #111; padding: 6px 12px; text-align: left; }
+th { font-weight: bold; border-bottom: 2px solid #111; }
+table tr:first-child th { border-top: 2px solid #111; }
+table tr:last-child td { border-bottom: 2px solid #111; }
+a { color: #111; text-decoration: underline; }
+a:hover { color: #444; }
+hr { border: none; border-top: 1px solid #999; margin: 2em 0; }
+img { max-width: 100%; display: block; margin: 1em auto; }
+ENDCSS
+}
+
+VS_BUILTIN=("gdocs" "github" "dark" "academic")
+
+fs_css_builtin() {
+    local s_name="$1"
+    case "$s_name" in
+        gdocs)    fs_css_builtin_gdocs ;;
+        github)   fs_css_builtin_github ;;
+        dark)     fs_css_builtin_dark ;;
+        academic) fs_css_builtin_academic ;;
+        *)        return 1 ;;
+    esac
+}
+
+fb_is_path() {
+    [[ "$1" == */* ]]
+}
+
+fs_css_resolve_imports() {
+    local s_css="$1"
+    local s_visited="$2"
+    local s_out=""
+
+    while IFS= read -r s_line; do
+        local s_import_file=""
+        if [[ "$s_line" =~ ^[[:space:]]*@import[[:space:]]+\"([^\"]+)\" ]] || \
+           [[ "$s_line" =~ ^[[:space:]]*@import[[:space:]]+\'([^\']+)\' ]]; then
+            s_import_file="${BASH_REMATCH[1]}"
+        fi
+
+        if [[ -z "$s_import_file" ]]; then
+            s_out+="$s_line"$'\n'
+            continue
+        fi
+
+        if [[ "$s_visited" == *"|$s_import_file|"* ]]; then
+            continue
+        fi
+
+        local s_visited_next="${s_visited}|${s_import_file}|"
+        local s_css_imported=""
+        s_css_imported="$(fs_css_for_name_or_path "$s_import_file" "$s_visited_next")" || {
+            echo "Error: @import file not found: $s_import_file" >&2
+            exit 1
+        }
+        s_out+="$s_css_imported"$'\n'
+    done <<< "$s_css"
+    printf '%s' "$s_out"
+}
+
+fs_css_for_name_or_path() {
+    local s_ref="$1"
+    local s_visited="${2:-}"
+    local s_css=""
+
+    if fb_is_path "$s_ref"; then
+        [[ ! -f "$s_ref" ]] && echo "Error: Style file not found: $s_ref" >&2 && return 1
+        s_css="$(<"$s_ref")"
+    else
+        local s_name="${s_ref%.css}"
+        if [[ -f "$S_DIR_USER/${s_name}.css" ]]; then
+            s_css="$(<"$S_DIR_USER/${s_name}.css")"
+        elif s_css="$(fs_css_builtin "$s_name")"; then
+            :
+        else
+            echo "Error: Style not found: $s_name" >&2
+            return 1
+        fi
+    fi
+
+    fs_css_resolve_imports "$s_css" "$s_visited"
+}
+
+fs_css_resolve() {
+    local s_style_arg="$1"
+    local s_ref=""
+
+    if [[ -n "$s_style_arg" ]]; then
+        s_ref="$s_style_arg"
+    elif [[ -n "${MDPREVIEW_STYLE:-}" ]]; then
+        s_ref="$MDPREVIEW_STYLE"
+    elif [[ -f "$S_DIR_USER/default.css" ]]; then
+        s_ref="$S_DIR_USER/default.css"
+    else
+        s_ref="gdocs"
+    fi
+
+    fs_css_for_name_or_path "$s_ref"
+}
+
+fs_name_default() {
+    if [[ -f "$S_DIR_USER/default.css" ]]; then
+        local s_target
+        if [[ -L "$S_DIR_USER/default.css" ]]; then
+            s_target="$(readlink "$S_DIR_USER/default.css")"
+            s_target="$(basename "$s_target" .css)"
+        else
+            s_target="default"
+        fi
+        echo "$s_target"
+    else
+        echo "gdocs"
+    fi
+}
+
+f_list_styles() {
+    local s_default
+    s_default="$(fs_name_default)"
+
+    local s_marker
+    for s_name in "${VS_BUILTIN[@]}"; do
+        s_marker=""
+        [[ "$s_name" == "$s_default" ]] && s_marker=" [default]"
+        echo "  $s_name (built-in)$s_marker"
+    done
+
+    [[ ! -d "$S_DIR_USER" ]] && return
+
+    for s_path_css in "$S_DIR_USER"/*.css; do
+        [[ ! -f "$s_path_css" ]] && continue
+        local s_name
+        s_name="$(basename "$s_path_css" .css)"
+        [[ "$s_name" == "default" ]] && continue
+
+        local b_is_builtin=false
+        for s_builtin in "${VS_BUILTIN[@]}"; do
+            [[ "$s_name" == "$s_builtin" ]] && b_is_builtin=true && break
+        done
+
+        s_marker=""
+        [[ "$s_name" == "$s_default" ]] && s_marker=" [default]"
+
+        if [[ "$b_is_builtin" == true ]]; then
+            echo "  $s_name (~/.mdpreview/ overrides built-in)$s_marker"
+        else
+            echo "  $s_name (~/.mdpreview/)$s_marker"
+        fi
+    done
+}
+
+f_replace_style_block() {
+    local s_path_html="$1"
+    local s_css="$2"
+    local s_path_tmp="${s_path_html}.tmp"
+    local s_path_css_tmp="${s_path_html}.css.tmp"
+
+    printf '%s\n' "$s_css" > "$s_path_css_tmp"
+
+    awk -v s_path_css="$s_path_css_tmp" '
+        /<style>/ { print "<style>"; while ((getline s_line < s_path_css) > 0) print s_line; close(s_path_css); b_skip=1; next }
+        /<\/style>/ { print "</style>"; b_skip=0; next }
+        !b_skip { print }
+    ' "$s_path_html" > "$s_path_tmp"
+
+    mv "$s_path_tmp" "$s_path_html"
+    rm -f "$s_path_css_tmp"
+}
+
+WATCH=false
+FILE=""
+S_STYLE_ARG=""
+B_LIST_STYLES=false
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -w|--watch)
+            WATCH=true
+            shift
+            ;;
+        --style=*)
+            S_STYLE_ARG="${1#--style=}"
+            shift
+            ;;
+        --style)
+            S_STYLE_ARG="$2"
+            shift 2
+            ;;
+        --list-styles)
+            B_LIST_STYLES=true
+            shift
+            ;;
+        -h|--help)
+            usage
+            ;;
+        *)
+            FILE="$1"
+            shift
+            ;;
+    esac
+done
+
+if [[ "$B_LIST_STYLES" == true ]]; then
+    echo "Available styles:"
+    f_list_styles
+    exit 0
+fi
+
+[[ -z "$FILE" ]] && usage
+[[ ! -f "$FILE" ]] && echo "File not found: $FILE" && exit 1
+
+S_CSS_RESOLVED="$(fs_css_resolve "$S_STYLE_ARG")" || exit 1
+
+HTML_FILE="/tmp/preview-$(basename "$FILE" .md).html"
+
+reload_browser() {
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        local HTML_FILENAME="$(basename "$HTML_FILE")"
+        local FOUND=false
+
+        if osascript -e "
+            tell application \"Google Chrome\"
+                repeat with w in windows
+                    repeat with t in tabs of w
+                        if URL of t contains \"$HTML_FILENAME\" then
+                            tell t to reload
+                            return \"found\"
+                        end if
+                    end repeat
+                end repeat
+            end tell
+        " 2>/dev/null | grep -q "found"; then
+            echo "Chrome tab reloaded"
+            FOUND=true
+        fi
+
+        if [[ "$FOUND" == false ]]; then
+            if osascript -e "
+                tell application \"Safari\"
+                    repeat with w in windows
+                        repeat with t in tabs of w
+                            if URL of t contains \"$HTML_FILENAME\" then
+                                tell t to do JavaScript \"location.reload()\"
+                                return \"found\"
+                            end if
+                        end repeat
+                    end repeat
+                end tell
+            " 2>/dev/null | grep -q "found"; then
+                echo "Safari tab reloaded"
+                FOUND=true
+            fi
+        fi
+
+        if [[ "$FOUND" == false ]]; then
+            echo "No browser tab found with $HTML_FILENAME"
+        fi
+    fi
+}
+
+convert() {
+    pandoc "$FILE" -f gfm -t html5 -s -o "$HTML_FILE"
+
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        sed -i '' 's|<title>.*</title>|<title>mdpreview</title>|' "$HTML_FILE"
+    else
+        sed -i 's|<title>.*</title>|<title>mdpreview</title>|' "$HTML_FILE"
+    fi
+
+    f_replace_style_block "$HTML_FILE" "$S_CSS_RESOLVED"
+
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        sed -i '' -e 's|</body>||' -e 's|</html>||' "$HTML_FILE"
+    else
+        sed -i -e 's|</body>||' -e 's|</html>||' "$HTML_FILE"
+    fi
+    cat >> "$HTML_FILE" << 'MERMAID_SCRIPT'
+<script type="module">
+import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+import elkLayouts from "https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk@0/dist/mermaid-layout-elk.esm.min.mjs";
+mermaid.registerLayoutLoaders(elkLayouts);
+mermaid.initialize({startOnLoad:false,flowchart:{curve:'basis'},theme:'default'});
+function decodeHtml(html){var txt=document.createElement('textarea');txt.innerHTML=html;return txt.value;}
+document.querySelectorAll("pre.mermaid").forEach(function(pre){var div=document.createElement("div");div.className="mermaid";var code=pre.querySelector("code");div.textContent=decodeHtml(code?code.innerHTML:pre.innerHTML);pre.replaceWith(div);});
+await mermaid.run();
+</script>
+</body>
+</html>
+MERMAID_SCRIPT
+}
+
+convert
+
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    open "file://$HTML_FILE"
+elif command -v xdg-open > /dev/null; then
+    xdg-open "file://$HTML_FILE"
+else
+    echo "Generated: file://$HTML_FILE"
+    echo "Please open in your browser"
+fi
+
+if [[ "$WATCH" == true ]]; then
+    echo "Watching $FILE for changes... (Ctrl-C to stop)"
+
+    if command -v fswatch > /dev/null; then
+        fswatch -o "$FILE" | while read; do
+            echo "File changed, regenerating..."
+            convert
+            reload_browser
+        done
+    elif command -v inotifywait > /dev/null; then
+        while inotifywait -e modify "$FILE" 2>/dev/null; do
+            echo "File changed, regenerating..."
+            convert
+            reload_browser
+        done
+    else
+        echo "Note: Install fswatch (Mac) or inotify-tools (Linux) for better performance"
+        LAST_MOD=""
+        while true; do
+            CURRENT_MOD=$(stat -f "%m" "$FILE" 2>/dev/null || stat -c "%Y" "$FILE" 2>/dev/null)
+            if [[ "$CURRENT_MOD" != "$LAST_MOD" ]]; then
+                echo "File changed, regenerating..."
+                convert
+                reload_browser
+                LAST_MOD="$CURRENT_MOD"
+            fi
+            sleep 2
+        done
+    fi
+fi
