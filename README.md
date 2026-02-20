@@ -4,6 +4,7 @@
 
 * Single-file bash script that converts Markdown to styled HTML and opens it in your browser
 * Renders Mermaid diagrams out of the box (no config, no plugins)
+* Side-by-side diff mode with red/green highlighting for comparing two markdown files
 * Ships with 4 built-in styles: gdocs, github, dark, academic
 * Supports custom CSS styles via `~/.mdpreview/` with `@import` for composability
 * Watch mode auto-regenerates and reloads the browser tab on file save
@@ -28,6 +29,7 @@ Optional: install `fswatch` (macOS) or `inotify-tools` (Linux) for efficient fil
 
 ```
 mdpreview [-w|--watch] [--style <name|path>] [--list-styles] <file.md>
+mdpreview --diff [-w|--watch] [--style <name|path>] <file1.md> <file2.md>
 ```
 
 Basic usage converts the file to HTML and opens it in your default browser:
@@ -117,6 +119,23 @@ body { font-family: "Times New Roman", Times, serif; }
 
 Imports resolve against `~/.mdpreview/` first, then fall back to built-in style names. Circular imports are detected and handled (each file is included at most once).
 
+## Diff mode
+
+Diff mode shows two markdown files side by side with changes highlighted. Removals appear in red on the left, additions in green on the right. Modified lines are paired on the same row so you can see exactly what changed. Lines that exist only in one file get a blank on the opposite side.
+
+```bash
+mdpreview --diff old.md new.md
+mdpreview --diff --style dark old.md new.md
+```
+
+Watch mode works with diff too, monitoring both files and regenerating when either changes:
+
+```bash
+mdpreview --diff -w old.md new.md
+```
+
+The diff colors adapt automatically to the active style. Dark styles get darker red/green highlights that are readable against the dark background.
+
 ## Mermaid diagrams
 
 Fenced code blocks with the `mermaid` language tag are rendered as diagrams via [Mermaid.js](https://mermaid.js.org/) (loaded from CDN). This works automatically with all styles. ELK layout is loaded for improved graph rendering.
@@ -131,4 +150,4 @@ mdpreview runs pandoc to convert GitHub-Flavored Markdown to a standalone HTML5 
 bash test/run_tests.sh
 ```
 
-The test suite covers style resolution precedence, all built-in styles, name resolution, `@import` with cycle detection, `--list-styles`, HTML output correctness, and error cases. Tests use stub commands for pandoc and browser openers so they run without side effects.
+The test suite covers style resolution precedence, all built-in styles, name resolution, `@import` with cycle detection, `--list-styles`, diff mode, HTML output correctness, and error cases. Tests use stub commands for pandoc and browser openers so they run without side effects.
