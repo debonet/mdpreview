@@ -248,6 +248,62 @@ f_assert_contains "$s_out" "Usage" "no file argument shows usage message"
 f_assert_exit_code "$z_exit" 1 "no file argument exits with error"
 
 
+printf "\n%s\n" "--- Diff Mode ---"
+
+fs_diff_html() {
+    local s_path="/tmp/diff-diff_old-diff_new.html"
+    rm -f "$s_path"
+    f_run --diff "$@" "$S_DIR_FIXTURES/diff_old.md" "$S_DIR_FIXTURES/diff_new.md" >/dev/null 2>&1
+    [[ -f "$s_path" ]] && cat "$s_path"
+}
+
+s_html="$(fs_diff_html)"
+f_assert_nonempty "$s_html" "diff mode produces non-empty HTML"
+f_assert_contains "$s_html" "<title>mdpreview diff</title>" "diff HTML title is 'mdpreview diff'"
+f_assert_contains "$s_html" "diff_old.md" "diff header contains first filename"
+f_assert_contains "$s_html" "diff_new.md" "diff header contains second filename"
+f_assert_contains "$s_html" "First paragraph" "diff shows unchanged lines"
+f_assert_contains "$s_html" "Third paragraph" "diff shows unchanged line"
+f_assert_contains "$s_html" "This line will be modified" "diff shows removed content"
+f_assert_contains "$s_html" "This line has been MODIFIED" "diff shows added/modified content"
+f_assert_contains "$s_html" "An entirely new paragraph" "diff shows added content"
+f_assert_contains "$s_html" "monospace" "diff uses monospace font"
+f_assert_contains "$s_html" "#fdd" "diff has removal highlight color (light)"
+f_assert_contains "$s_html" "#dfd" "diff has addition highlight color (light)"
+f_assert_contains "$s_html" "diff-gutter" "diff has line number gutters"
+f_assert_contains "$s_html" "diff-table" "diff has table structure"
+f_assert_not_contains "$s_html" "mermaid" "diff mode does not include mermaid"
+
+s_html="$(fs_diff_html --style dark)"
+f_assert_contains "$s_html" "#3c1618" "diff with dark style uses dark removal color"
+f_assert_contains "$s_html" "#1a3c1e" "diff with dark style uses dark addition color"
+f_assert_contains "$s_html" "#161b22" "diff with dark style uses dark blank color"
+
+s_html="$(fs_diff_html --style github)"
+f_assert_contains "$s_html" "BlinkMacSystemFont" "diff --style flag applies base style CSS"
+
+s_out="$(f_run --diff "$S_DIR_FIXTURES/diff_old.md")"
+z_exit=$(fz_exit --diff "$S_DIR_FIXTURES/diff_old.md")
+f_assert_contains "$s_out" "Error" "--diff with one file produces error"
+f_assert_exit_code "$z_exit" 1 "--diff with one file exits with error"
+
+s_out="$(f_run --diff "$S_DIR_FIXTURES/diff_old.md" /nonexistent/file.md)"
+z_exit=$(fz_exit --diff "$S_DIR_FIXTURES/diff_old.md" /nonexistent/file.md)
+f_assert_contains "$s_out" "File not found" "--diff with nonexistent file2 produces error"
+f_assert_exit_code "$z_exit" 1 "--diff with nonexistent file2 exits with error"
+
+rm -f /tmp/diff-diff_old-diff_new.html
+f_run --diff "$S_DIR_FIXTURES/diff_old.md" "$S_DIR_FIXTURES/diff_new.md" >/dev/null 2>&1
+if [[ -f /tmp/diff-diff_old-diff_new.html ]]; then
+    f_pass "diff output file created at expected path"
+else
+    f_fail "diff output file created at expected path" "file not found"
+fi
+
+s_html="$(fs_html)"
+f_assert_contains "$s_html" "mermaid" "normal mode still works after diff tests"
+
+
 printf "\n=== Results ===\n"
 printf "Passed: %d / %d\n" "$cPass" "$cTotal"
 printf "Failed: %d / %d\n" "$cFail" "$cTotal"

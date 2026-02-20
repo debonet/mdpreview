@@ -4,9 +4,11 @@ S_DIR_USER="$HOME/.mdpreview"
 
 usage() {
     echo "Usage: mdpreview [-w|--watch] [--style <name|path>] [--list-styles] <file.md>"
+    echo "       mdpreview --diff [-w|--watch] [--style <name|path>] <file1.md> <file2.md>"
     echo "  -w, --watch         Watch file for changes and auto-refresh"
     echo "  --style <name|path> Use named style or CSS file path"
     echo "  --list-styles       List all available styles and exit"
+    echo "  --diff              Side-by-side diff of two markdown files"
     exit 1
 }
 
@@ -269,8 +271,10 @@ f_replace_style_block() {
 
 WATCH=false
 FILE=""
+S_FILE2=""
 S_STYLE_ARG=""
 B_LIST_STYLES=false
+B_DIFF=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -290,11 +294,19 @@ while [[ $# -gt 0 ]]; do
             B_LIST_STYLES=true
             shift
             ;;
+        --diff)
+            B_DIFF=true
+            shift
+            ;;
         -h|--help)
             usage
             ;;
         *)
-            FILE="$1"
+            if [[ -z "$FILE" ]]; then
+                FILE="$1"
+            else
+                S_FILE2="$1"
+            fi
             shift
             ;;
     esac
@@ -311,7 +323,13 @@ fi
 
 S_CSS_RESOLVED="$(fs_css_resolve "$S_STYLE_ARG")" || exit 1
 
-HTML_FILE="/tmp/preview-$(basename "$FILE" .md).html"
+if [[ "$B_DIFF" == true ]]; then
+    [[ -z "$S_FILE2" ]] && echo "Error: --diff requires two files" && exit 1
+    [[ ! -f "$S_FILE2" ]] && echo "File not found: $S_FILE2" && exit 1
+    HTML_FILE="/tmp/diff-$(basename "$FILE" .md)-$(basename "$S_FILE2" .md).html"
+else
+    HTML_FILE="/tmp/preview-$(basename "$FILE" .md).html"
+fi
 
 reload_browser() {
     if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -358,6 +376,160 @@ reload_browser() {
     fi
 }
 
+fb_is_dark_style() {
+    local s_css="$1"
+    local s_bg=""
+    if [[ "$s_css" =~ body[[:space:]]*\{[^}]*background:[[:space:]]*#([0-9a-fA-F]) ]]; then
+        s_bg="${BASH_REMATCH[1]}"
+    fi
+    [[ "$s_bg" == [0-3] ]]
+}
+
+fs_html_escape() {
+    local s="$1"
+    s="${s//&/&amp;}"
+    s="${s//</&lt;}"
+    s="${s//>/&gt;}"
+    printf '%s' "$s"
+}
+
+f_generate_diff() {
+    local s_bg_remove s_bg_add s_bg_blank s_color_remove s_color_add s_border_color
+    if fb_is_dark_style "$S_CSS_RESOLVED"; then
+        s_bg_remove="#3c1618"
+        s_bg_add="#1a3c1e"
+        s_bg_blank="#161b22"
+        s_color_remove="#f88"
+        s_color_add="#8f8"
+        s_border_color="#333"
+    else
+        s_bg_remove="#fdd"
+        s_bg_add="#dfd"
+        s_bg_blank="#f8f8f8"
+        s_color_remove="#800"
+        s_color_add="#080"
+        s_border_color="#ddd"
+    fi
+
+    local s_diff_out
+    s_diff_out="$(diff --unified=999999 "$FILE" "$S_FILE2" 2>/dev/null)" || true
+
+    local s_rows=""
+    local z_left=0
+    local z_right=0
+    local b_in_diff=false
+    local vs_removed=()
+    local vs_added=()
+
+    f_flush_hunks() {
+        local c_removed=${#vs_removed[@]}
+        local c_added=${#vs_added[@]}
+        local c_max=$((c_removed > c_added ? c_removed : c_added))
+        local n
+        for ((n=0; n<c_max; n++)); do
+            s_rows+="<tr>"
+            if ((n < c_removed)); then
+                z_left=$((z_left + 1))
+                s_rows+="<td class=\"diff-gutter\" style=\"background:${s_bg_remove};\">${z_left}</td>"
+                s_rows+="<td class=\"diff-content\" style=\"background:${s_bg_remove};color:${s_color_remove};\">${vs_removed[$n]}</td>"
+            else
+                s_rows+="<td class=\"diff-gutter\" style=\"background:${s_bg_blank};\"></td>"
+                s_rows+="<td class=\"diff-content\" style=\"background:${s_bg_blank};\"></td>"
+            fi
+            s_rows+="<td class=\"diff-sep\"></td>"
+            if ((n < c_added)); then
+                z_right=$((z_right + 1))
+                s_rows+="<td class=\"diff-gutter\" style=\"background:${s_bg_add};\">${z_right}</td>"
+                s_rows+="<td class=\"diff-content\" style=\"background:${s_bg_add};color:${s_color_add};\">${vs_added[$n]}</td>"
+            else
+                s_rows+="<td class=\"diff-gutter\" style=\"background:${s_bg_blank};\"></td>"
+                s_rows+="<td class=\"diff-content\" style=\"background:${s_bg_blank};\"></td>"
+            fi
+            s_rows+="</tr>"
+        done
+        vs_removed=()
+        vs_added=()
+    }
+
+    while IFS= read -r s_line; do
+        if [[ "$b_in_diff" == false ]]; then
+            if [[ "$s_line" == "@@"* ]]; then
+                b_in_diff=true
+            fi
+            continue
+        fi
+
+        local s_prefix="${s_line:0:1}"
+        local s_content="${s_line:1}"
+        local s_escaped
+        s_escaped="$(fs_html_escape "$s_content")"
+
+        case "$s_prefix" in
+            -)
+                vs_removed+=("$s_escaped")
+                ;;
+            +)
+                vs_added+=("$s_escaped")
+                ;;
+            " ")
+                f_flush_hunks
+                z_left=$((z_left + 1))
+                z_right=$((z_right + 1))
+                s_rows+="<tr><td class=\"diff-gutter\">${z_left}</td>"
+                s_rows+="<td class=\"diff-content\">${s_escaped}</td>"
+                s_rows+="<td class=\"diff-sep\"></td>"
+                s_rows+="<td class=\"diff-gutter\">${z_right}</td>"
+                s_rows+="<td class=\"diff-content\">${s_escaped}</td></tr>"
+                ;;
+        esac
+    done <<< "$s_diff_out"
+    f_flush_hunks
+
+    if [[ -z "$s_diff_out" ]]; then
+        local z_n=0
+        while IFS= read -r s_line; do
+            z_n=$((z_n + 1))
+            local s_escaped
+            s_escaped="$(fs_html_escape "$s_line")"
+            s_rows+="<tr><td class=\"diff-gutter\">${z_n}</td>"
+            s_rows+="<td class=\"diff-content\">${s_escaped}</td>"
+            s_rows+="<td class=\"diff-sep\"></td>"
+            s_rows+="<td class=\"diff-gutter\">${z_n}</td>"
+            s_rows+="<td class=\"diff-content\">${s_escaped}</td></tr>"
+        done < "$FILE"
+    fi
+
+    local s_name1 s_name2
+    s_name1="$(basename "$FILE")"
+    s_name2="$(basename "$S_FILE2")"
+
+    cat > "$HTML_FILE" <<DIFFHTML
+<!DOCTYPE html>
+<html>
+<head>
+<title>mdpreview diff</title>
+<style>
+${S_CSS_RESOLVED}
+body { max-width: none; padding: 0; margin: 0; }
+.diff-header { padding: 8px 16px; border-bottom: 1px solid ${s_border_color}; display: flex; justify-content: space-between; }
+.diff-header span { font-weight: 600; }
+.diff-table { width: 100%; border-collapse: collapse; font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; font-size: 13px; line-height: 1.4; }
+.diff-table td { padding: 0 8px; white-space: pre-wrap; word-wrap: break-word; vertical-align: top; }
+.diff-gutter { width: 1px; white-space: nowrap; padding: 0 8px; text-align: right; color: #888; user-select: none; border-right: 1px solid ${s_border_color}; }
+.diff-content { width: 50%; }
+.diff-sep { width: 1px; border-right: 1px solid ${s_border_color}; }
+</style>
+</head>
+<body>
+<div class="diff-header"><span>${s_name1}</span><span>${s_name2}</span></div>
+<table class="diff-table">
+${s_rows}
+</table>
+</body>
+</html>
+DIFFHTML
+}
+
 convert() {
     pandoc "$FILE" -f gfm -t html5 -s -o "$HTML_FILE"
 
@@ -389,7 +561,11 @@ await mermaid.run();
 MERMAID_SCRIPT
 }
 
-convert
+if [[ "$B_DIFF" == true ]]; then
+    f_generate_diff
+else
+    convert
+fi
 
 if [[ "$OSTYPE" == "darwin"* ]]; then
     open "file://$HTML_FILE"
@@ -400,33 +576,75 @@ else
     echo "Please open in your browser"
 fi
 
+f_regenerate() {
+    if [[ "$B_DIFF" == true ]]; then
+        f_generate_diff
+    else
+        convert
+    fi
+}
+
 if [[ "$WATCH" == true ]]; then
-    echo "Watching $FILE for changes... (Ctrl-C to stop)"
+    if [[ "$B_DIFF" == true ]]; then
+        echo "Watching $FILE and $S_FILE2 for changes... (Ctrl-C to stop)"
+    else
+        echo "Watching $FILE for changes... (Ctrl-C to stop)"
+    fi
 
     if command -v fswatch > /dev/null; then
         S_DIR_WATCH="$(dirname "$FILE")"
         S_BASE_WATCH="$(basename "$FILE")"
-        fswatch -o --include="$S_BASE_WATCH" --exclude=".*" "$S_DIR_WATCH" | while read; do
-            echo "File changed, regenerating..."
-            convert
-            reload_browser
-        done
+        if [[ "$B_DIFF" == true ]]; then
+            S_DIR_WATCH2="$(dirname "$S_FILE2")"
+            S_BASE_WATCH2="$(basename "$S_FILE2")"
+            if [[ "$S_DIR_WATCH" == "$S_DIR_WATCH2" ]]; then
+                fswatch -o --include="$S_BASE_WATCH" --include="$S_BASE_WATCH2" --exclude=".*" "$S_DIR_WATCH" | while read; do
+                    echo "File changed, regenerating..."
+                    f_regenerate
+                    reload_browser
+                done
+            else
+                fswatch -o --include="$S_BASE_WATCH" --exclude=".*" "$S_DIR_WATCH" --include="$S_BASE_WATCH2" --exclude=".*" "$S_DIR_WATCH2" | while read; do
+                    echo "File changed, regenerating..."
+                    f_regenerate
+                    reload_browser
+                done
+            fi
+        else
+            fswatch -o --include="$S_BASE_WATCH" --exclude=".*" "$S_DIR_WATCH" | while read; do
+                echo "File changed, regenerating..."
+                f_regenerate
+                reload_browser
+            done
+        fi
     elif command -v inotifywait > /dev/null; then
-        while inotifywait -e modify "$FILE" 2>/dev/null; do
-            echo "File changed, regenerating..."
-            convert
-            reload_browser
-        done
+        if [[ "$B_DIFF" == true ]]; then
+            while inotifywait -e modify "$FILE" "$S_FILE2" 2>/dev/null; do
+                echo "File changed, regenerating..."
+                f_regenerate
+                reload_browser
+            done
+        else
+            while inotifywait -e modify "$FILE" 2>/dev/null; do
+                echo "File changed, regenerating..."
+                f_regenerate
+                reload_browser
+            done
+        fi
     else
         echo "Note: Install fswatch (Mac) or inotify-tools (Linux) for better performance"
         LAST_MOD=""
+        LAST_MOD2=""
         while true; do
             CURRENT_MOD=$(stat -f "%m" "$FILE" 2>/dev/null || stat -c "%Y" "$FILE" 2>/dev/null)
-            if [[ "$CURRENT_MOD" != "$LAST_MOD" ]]; then
+            CURRENT_MOD2=""
+            [[ "$B_DIFF" == true ]] && CURRENT_MOD2=$(stat -f "%m" "$S_FILE2" 2>/dev/null || stat -c "%Y" "$S_FILE2" 2>/dev/null)
+            if [[ "$CURRENT_MOD" != "$LAST_MOD" ]] || [[ "$CURRENT_MOD2" != "$LAST_MOD2" ]]; then
                 echo "File changed, regenerating..."
-                convert
+                f_regenerate
                 reload_browser
                 LAST_MOD="$CURRENT_MOD"
+                LAST_MOD2="$CURRENT_MOD2"
             fi
             sleep 2
         done
