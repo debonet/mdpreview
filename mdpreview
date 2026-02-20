@@ -404,7 +404,9 @@ if [[ "$WATCH" == true ]]; then
     echo "Watching $FILE for changes... (Ctrl-C to stop)"
 
     if command -v fswatch > /dev/null; then
-        fswatch -o "$FILE" | while read; do
+        S_DIR_WATCH="$(dirname "$FILE")"
+        S_BASE_WATCH="$(basename "$FILE")"
+        fswatch -o --include="$S_BASE_WATCH" --exclude=".*" "$S_DIR_WATCH" | while read; do
             echo "File changed, regenerating..."
             convert
             reload_browser
