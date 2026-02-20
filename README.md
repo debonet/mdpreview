@@ -62,7 +62,7 @@ mdpreview resolves which style to use in this order:
 | `dark`     | GitHub dark theme. #0d1117 background, light text, blue links.          |
 | `academic` | LaTeX-inspired. Georgia serif, justified text, centered h1, narrow width. |
 
-Select a style by name:
+Select a style by name. Just the name, no path or `.css` extension needed:
 
 ```bash
 mdpreview --style github document.md
@@ -83,7 +83,7 @@ mdpreview --list-styles
 
 ### Custom styles
 
-Create `~/.mdpreview/` and drop CSS files in it. Style files are raw CSS (no `<style>` tags). The filename minus `.css` becomes the style name.
+Create `~/.mdpreview/` and drop CSS files in it. Style files are raw CSS (no `<style>` tags). The filename minus `.css` becomes the style name, and you reference it the same way as a built-in: just `--style narrow`, not `--style ~/.mdpreview/narrow.css`.
 
 ```bash
 mkdir -p ~/.mdpreview

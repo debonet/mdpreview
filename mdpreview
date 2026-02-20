@@ -3,13 +3,24 @@
 S_DIR_USER="$HOME/.mdpreview"
 
 usage() {
-    echo "Usage: mdpreview [-w|--watch] [--style <name|path>] [--list-styles] <file.md>"
-    echo "       mdpreview --diff [-w|--watch] [--style <name|path>] <file1.md> <file2.md>"
-    echo "  -w, --watch         Watch file for changes and auto-refresh"
-    echo "  --style <name|path> Use named style or CSS file path"
-    echo "  --list-styles       List all available styles and exit"
-    echo "  --diff              Side-by-side diff of two markdown files"
-    exit 1
+    cat <<'USAGE'
+Usage: mdpreview [options] <file.md>
+       mdpreview --diff [options] <file1.md> <file2.md>
+
+Options:
+  -w, --watch         Watch file(s) for changes and auto-refresh browser
+  --style <name|path> Use a style by name (e.g. --style github). Names resolve
+                      against built-ins and ~/.mdpreview/. Also accepts a file path.
+  --list-styles       List all available styles and exit
+  --diff              Side-by-side diff of two markdown files
+  -h, --help          Show this help message
+
+Styles are resolved in order: --style flag, MDPREVIEW_STYLE env var,
+~/.mdpreview/default.css, then built-in gdocs.
+
+Custom styles go in ~/.mdpreview/ as .css files. Use @import to compose styles.
+USAGE
+    exit "${1:-1}"
 }
 
 fs_css_builtin_gdocs() {
@@ -299,7 +310,7 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         -h|--help)
-            usage
+            usage 0
             ;;
         *)
             if [[ -z "$FILE" ]]; then
