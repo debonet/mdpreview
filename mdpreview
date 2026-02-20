@@ -337,9 +337,9 @@ S_CSS_RESOLVED="$(fs_css_resolve "$S_STYLE_ARG")" || exit 1
 if [[ "$B_DIFF" == true ]]; then
     [[ -z "$S_FILE2" ]] && echo "Error: --diff requires two files" && exit 1
     [[ ! -f "$S_FILE2" ]] && echo "File not found: $S_FILE2" && exit 1
-    HTML_FILE="/tmp/diff-$(basename "$FILE" .md)-$(basename "$S_FILE2" .md).html"
+    HTML_FILE="/tmp/diff-$(basename "$FILE" .md | tr ' ' '_')-$(basename "$S_FILE2" .md | tr ' ' '_').html"
 else
-    HTML_FILE="/tmp/preview-$(basename "$FILE" .md).html"
+    HTML_FILE="/tmp/preview-$(basename "$FILE" .md | tr ' ' '_').html"
 fi
 
 reload_browser() {
