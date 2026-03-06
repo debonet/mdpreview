@@ -583,12 +583,13 @@ f_process_diagrams() {
                 if [[ "$s_block_type" == "d2" ]]; then
                     local vs_args=()
                     [[ -n "$s_block_engine" ]] && vs_args+=(--layout "$s_block_engine")
-                    printf '%s\n' "$s_block_content" | d2 "${vs_args[@]}" - "$s_path_svg" 2>/dev/null && b_ok=true
+                    printf '%s\n' "$s_block_content" | d2 "${vs_args[@]}" - "$s_path_svg" 2>/dev/null
                 elif [[ "$s_block_type" == "graphviz" ]]; then
                     local s_gv_cmd="${s_block_engine:-dot}"
-                    printf '%s\n' "$s_block_content" | "$s_gv_cmd" -Tsvg -o "$s_path_svg" 2>/dev/null && b_ok=true
+                    printf '%s\n' "$s_block_content" | "$s_gv_cmd" -Tsvg -o "$s_path_svg" 2>/dev/null
                 fi
 
+                [[ -s "$s_path_svg" ]] && b_ok=true
                 if [[ "$b_ok" == true ]]; then
                     printf '\n<div class="%s-diagram" style="width:100%%;margin:11pt 0;"><img src="%s" style="width:100%%;" /></div>\n\n' "$s_block_type" "$(basename "$s_path_svg")" >> "$S_FILE_DIAGRAMS"
                 else
