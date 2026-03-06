@@ -304,6 +304,94 @@ s_html="$(fs_html)"
 f_assert_contains "$s_html" "mermaid" "normal mode still works after diff tests"
 
 
+printf "\n%s\n" "--- D2 Diagram Support ---"
+
+fs_d2_html() {
+    local s_path="/tmp/preview-sample_d2.html"
+    rm -f "$s_path"
+    f_run "$@" "$S_DIR_FIXTURES/sample_d2.md" >/dev/null 2>&1
+    [[ -f "$s_path" ]] && cat "$s_path"
+}
+
+s_html="$(fs_d2_html)"
+f_assert_contains "$s_html" "d2-diagram" "d2 blocks replaced with d2-diagram div"
+f_assert_contains "$s_html" '<img src="mdpreview-diagram-' "d2 img tag references SVG file"
+
+s_count="$(echo "$s_html" | grep -o 'd2-diagram' | wc -l | tr -d ' ')"
+if [[ "$s_count" -ge 2 ]]; then
+    f_pass "multiple d2 blocks rendered (found $s_count)"
+else
+    f_fail "multiple d2 blocks rendered" "expected >= 2, found $s_count"
+fi
+
+f_assert_contains "$s_html" "mermaid" "mermaid blocks preserved alongside d2"
+f_assert_contains "$s_html" "Some text before" "non-d2 text preserved (before)"
+f_assert_contains "$s_html" "More text after" "non-d2 text preserved (after)"
+
+s_warn="$(
+    S_DIR_NO_D2="$(mktemp -d)"
+    for s_stub in "$S_DIR_STUBS"/*; do
+        [[ "$(basename "$s_stub")" == "d2" ]] && continue
+        cp "$s_stub" "$S_DIR_NO_D2/"
+    done
+    HOME="$S_DIR_FAKE_HOME" \
+    PATH="$S_DIR_NO_D2:/usr/bin:/bin" \
+    "$S_MDPREVIEW" "$S_DIR_FIXTURES/sample_d2.md" 2>&1 1>/dev/null
+    rm -rf "$S_DIR_NO_D2"
+)" || true
+f_assert_contains "$s_warn" "Warning" "d2 not installed shows warning"
+f_assert_contains "$s_warn" "d2 not installed" "warning mentions d2 not installed"
+
+s_html="$(fs_html)"
+f_assert_nonempty "$s_html" "regular markdown (no d2 blocks) still works"
+f_assert_contains "$s_html" "mermaid" "regular markdown still has mermaid script"
+
+s_leftover="$(ls /tmp/mdpreview-diagrams-*.md 2>/dev/null || true)"
+if [[ -z "$s_leftover" ]]; then
+    f_pass "diagram temp files cleaned up"
+else
+    f_fail "diagram temp files cleaned up" "found: $s_leftover"
+fi
+
+
+printf "\n%s\n" "--- Graphviz Diagram Support ---"
+
+fs_gv_html() {
+    local s_path="/tmp/preview-sample_gv.html"
+    rm -f "$s_path"
+    f_run "$@" "$S_DIR_FIXTURES/sample_gv.md" >/dev/null 2>&1
+    [[ -f "$s_path" ]] && cat "$s_path"
+}
+
+s_html="$(fs_gv_html)"
+f_assert_contains "$s_html" "graphviz-diagram" "graphviz blocks replaced with graphviz-diagram div"
+f_assert_contains "$s_html" '<img src="mdpreview-diagram-' "graphviz img tag references SVG file"
+
+s_count="$(echo "$s_html" | grep -o 'graphviz-diagram' | wc -l | tr -d ' ')"
+if [[ "$s_count" -ge 2 ]]; then
+    f_pass "multiple graphviz blocks rendered (found $s_count)"
+else
+    f_fail "multiple graphviz blocks rendered" "expected >= 2, found $s_count"
+fi
+
+f_assert_contains "$s_html" "Some text before" "non-graphviz text preserved (before)"
+f_assert_contains "$s_html" "More text after" "non-graphviz text preserved (after)"
+
+s_warn="$(
+    S_DIR_NO_GV="$(mktemp -d)"
+    for s_stub in "$S_DIR_STUBS"/*; do
+        [[ "$(basename "$s_stub")" == "dot" ]] && continue
+        cp "$s_stub" "$S_DIR_NO_GV/"
+    done
+    HOME="$S_DIR_FAKE_HOME" \
+    PATH="$S_DIR_NO_GV:/usr/bin:/bin" \
+    "$S_MDPREVIEW" "$S_DIR_FIXTURES/sample_gv.md" 2>&1 1>/dev/null
+    rm -rf "$S_DIR_NO_GV"
+)" || true
+f_assert_contains "$s_warn" "Warning" "graphviz not installed shows warning"
+f_assert_contains "$s_warn" "graphviz not installed" "warning mentions graphviz not installed"
+
+
 printf "\n=== Results ===\n"
 printf "Passed: %d / %d\n" "$cPass" "$cTotal"
 printf "Failed: %d / %d\n" "$cFail" "$cTotal"

@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+s_out=""
+for s_arg; do
+    [[ "$s_arg" != "-" && "$s_arg" != --* ]] && s_out="$s_arg"
+done
+cat > /dev/null
+if [[ -n "$s_out" ]]; then
+    printf '<svg><text>d2-stub</text></svg>' > "$s_out"
+    exit 0
+fi
+exit 1

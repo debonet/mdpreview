@@ -541,8 +541,89 @@ ${s_rows}
 DIFFHTML
 }
 
+VS_DIAGRAM_TEMPS_PREV=()
+
+f_process_diagrams() {
+    for s_tmp in "${VS_DIAGRAM_TEMPS_PREV[@]}"; do rm -f "$s_tmp"; done
+    VS_DIAGRAM_TEMPS_PREV=()
+    S_FILE_DIAGRAMS="$FILE"
+
+    local b_has_d2=false b_has_gv=false
+    grep -q '^```d2' "$FILE" 2>/dev/null && b_has_d2=true
+    grep -q '^```graphviz' "$FILE" 2>/dev/null && b_has_gv=true
+
+    if [[ "$b_has_d2" == true ]] && ! command -v d2 > /dev/null; then
+        echo "Warning: d2 not installed, D2 diagrams will render as code blocks" >&2
+        b_has_d2=false
+    fi
+    if [[ "$b_has_gv" == true ]] && ! command -v dot > /dev/null; then
+        echo "Warning: graphviz not installed, Graphviz diagrams will render as code blocks" >&2
+        b_has_gv=false
+    fi
+
+    if [[ "$b_has_d2" == false && "$b_has_gv" == false ]]; then
+        return
+    fi
+
+    S_FILE_DIAGRAMS="$(mktemp /tmp/mdpreview-diagrams-XXXXXX.md)"
+    VS_DIAGRAM_TEMPS=()
+    local b_in_block=false
+    local s_block_type=""
+    local s_block_engine=""
+    local s_block_content=""
+
+    while IFS= read -r s_line || [[ -n "$s_line" ]]; do
+        if [[ "$b_in_block" == true ]]; then
+            if [[ "$s_line" == '```' ]]; then
+                b_in_block=false
+                local s_path_svg="/tmp/mdpreview-diagram-$$-${#VS_DIAGRAM_TEMPS[@]}.svg"
+                VS_DIAGRAM_TEMPS+=("$s_path_svg")
+                local b_ok=false
+
+                if [[ "$s_block_type" == "d2" ]]; then
+                    local vs_args=()
+                    [[ -n "$s_block_engine" ]] && vs_args+=(--layout "$s_block_engine")
+                    printf '%s\n' "$s_block_content" | d2 "${vs_args[@]}" - "$s_path_svg" 2>/dev/null && b_ok=true
+                elif [[ "$s_block_type" == "graphviz" ]]; then
+                    local s_gv_cmd="${s_block_engine:-dot}"
+                    printf '%s\n' "$s_block_content" | "$s_gv_cmd" -Tsvg -o "$s_path_svg" 2>/dev/null && b_ok=true
+                fi
+
+                if [[ "$b_ok" == true ]]; then
+                    printf '\n<div class="%s-diagram" style="width:100%%;margin:11pt 0;"><img src="%s" style="width:100%%;" /></div>\n\n' "$s_block_type" "$(basename "$s_path_svg")" >> "$S_FILE_DIAGRAMS"
+                else
+                    echo "Warning: $s_block_type compilation failed for a block" >&2
+                    printf '```%s\n%s\n```\n' "$s_block_type" "$s_block_content" >> "$S_FILE_DIAGRAMS"
+                fi
+                s_block_content=""
+            else
+                if [[ -n "$s_block_content" ]]; then
+                    s_block_content+=$'\n'"$s_line"
+                else
+                    s_block_content="$s_line"
+                fi
+            fi
+        elif [[ "$s_line" =~ ^\`\`\`(d2|graphviz)(:(.+))?$ ]]; then
+            s_block_type="${BASH_REMATCH[1]}"
+            s_block_engine="${BASH_REMATCH[3]}"
+            if [[ "$s_block_type" == "d2" && "$b_has_d2" == true ]] || \
+               [[ "$s_block_type" == "graphviz" && "$b_has_gv" == true ]]; then
+                b_in_block=true
+                s_block_content=""
+            else
+                printf '%s\n' "$s_line" >> "$S_FILE_DIAGRAMS"
+            fi
+        else
+            printf '%s\n' "$s_line" >> "$S_FILE_DIAGRAMS"
+        fi
+    done < "$FILE"
+}
+
 convert() {
-    pandoc "$FILE" -f gfm -t html5 -s -o "$HTML_FILE"
+    f_process_diagrams
+    pandoc "$S_FILE_DIAGRAMS" -f gfm -t html5 -s -o "$HTML_FILE"
+    [[ "$S_FILE_DIAGRAMS" != "$FILE" ]] && rm -f "$S_FILE_DIAGRAMS"
+    VS_DIAGRAM_TEMPS_PREV=("${VS_DIAGRAM_TEMPS[@]}")
 
     if [[ "$OSTYPE" == "darwin"* ]]; then
         sed -i '' 's|<title>.*</title>|<title>mdpreview</title>|' "$HTML_FILE"

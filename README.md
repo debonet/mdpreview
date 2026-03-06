@@ -3,7 +3,7 @@
 ## TL;DR
 
 * Single-file bash script that converts Markdown to styled HTML and opens it in your browser
-* Renders Mermaid diagrams out of the box (no config, no plugins)
+* Renders Mermaid, D2, and Graphviz diagrams out of the box
 * Side-by-side diff mode with red/green highlighting for comparing two markdown files
 * Ships with 4 built-in styles: gdocs, github, dark, academic
 * Supports custom CSS styles via `~/.mdpreview/` with `@import` for composability
@@ -15,7 +15,13 @@ Pandoc converts Markdown to HTML but the default output looks like unstyled 1996
 
 ## Installation
 
-mdpreview is a single file with one dependency: [pandoc](https://pandoc.org/installing.html).
+mdpreview is a single file with one required dependency: [pandoc](https://pandoc.org/installing.html).
+
+Optional dependencies for diagram rendering:
+
+* [d2](https://d2lang.com/tour/install) for D2 diagrams (`brew install d2`)
+* [Graphviz](https://graphviz.org/download/) for Graphviz diagrams (`brew install graphviz`)
+* Mermaid diagrams require no local install (rendered via CDN)
 
 ```bash
 # Copy the script somewhere on your PATH
@@ -136,9 +142,43 @@ mdpreview --diff -w old.md new.md
 
 The diff colors adapt automatically to the active style. Dark styles get darker red/green highlights that are readable against the dark background.
 
-## Mermaid diagrams
+## Diagrams
+
+### Mermaid
 
 Fenced code blocks with the `mermaid` language tag are rendered as diagrams via [Mermaid.js](https://mermaid.js.org/) (loaded from CDN). This works automatically with all styles. ELK layout is loaded for improved graph rendering.
+
+### D2
+
+Fenced code blocks with the `d2` language tag are compiled to SVG using the [D2](https://d2lang.com/) CLI tool. D2 blocks are processed before pandoc runs, so the resulting SVGs are referenced in the HTML output. If `d2` is not installed, blocks render as plain code with a warning.
+
+You can specify a layout engine after the language tag:
+
+````markdown
+```d2:elk
+x -> y -> z
+```
+````
+
+### Graphviz
+
+Fenced code blocks with the `graphviz` language tag are compiled to SVG using Graphviz's `dot` command. Like D2, blocks are processed before pandoc runs. If Graphviz is not installed, blocks render as plain code with a warning.
+
+You can specify a layout engine after the language tag. The default is `dot`.
+
+````markdown
+```graphviz
+digraph G { A -> B -> C }
+```
+
+```graphviz:neato
+graph G { A -- B -- C }
+```
+````
+
+Available engines: `dot`, `neato`, `fdp`, `sfdp`, `twopi`, `circo`.
+
+All three diagram types (Mermaid, D2, Graphviz) can coexist in the same file.
 
 ## How it works
 
@@ -150,4 +190,4 @@ mdpreview runs pandoc to convert GitHub-Flavored Markdown to a standalone HTML5 
 bash test/run_tests.sh
 ```
 
-The test suite covers style resolution precedence, all built-in styles, name resolution, `@import` with cycle detection, `--list-styles`, diff mode, HTML output correctness, and error cases. Tests use stub commands for pandoc and browser openers so they run without side effects.
+The test suite covers style resolution, all built-in styles, name resolution, `@import` with cycle detection, `--list-styles`, diff mode, D2 diagrams, Graphviz diagrams, HTML output correctness, and error cases. Tests use stub commands for pandoc, d2, dot, and browser openers so they run without side effects.

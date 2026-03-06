@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+s_out=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -o) s_out="$2"; shift 2 ;;
+        *) shift ;;
+    esac
+done
+cat > /dev/null
+if [[ -n "$s_out" ]]; then
+    printf '<svg><text>graphviz-stub</text></svg>' > "$s_out"
+    exit 0
+fi
+exit 1
